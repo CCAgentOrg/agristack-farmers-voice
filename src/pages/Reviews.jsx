@@ -114,6 +114,13 @@ export default function Reviews() {
   const fadeTimerRef = useRef(null);
   const poolRef = useRef([]);
 
+  // Start the auto-rotation interval
+  const startTimer = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (paused || poolRef.current.length === 0) return;
+    timerRef.current = setInterval(() => rotate(1), ROTATE_INTERVAL_MS);
+  }, [paused]);
+
   useEffect(() => {
     fetch(DATA_URL)
       .then(r => r.json())
@@ -126,45 +133,55 @@ export default function Reviews() {
       .catch(() => setLoading(false));
   }, []);
 
-  const rotate = useCallback((dir = 1) => {
-    if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
-    setFade(true);
-    fadeTimerRef.current = setTimeout(() => {
-      setCurrentIdx(prev => {
-        const p = poolRef.current;
-        if (p.length === 0) return prev;
-        if (dir === 1) return (prev + 1) % p.length;
-        return (prev - 1 + p.length) % p.length;
-      });
-      setFade(false);
-      fadeTimerRef.current = null;
-    }, TRANSITION_DURATION / 2);
-  }, []);
-
-  const shuffle = useCallback(() => {
-    if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
-    setFade(true);
-    fadeTimerRef.current = setTimeout(() => {
-      setCurrentIdx(Math.floor(Math.random() * poolRef.current.length));
-      setFade(false);
-      fadeTimerRef.current = null;
-    }, TRANSITION_DURATION / 2);
-  }, []);
-
-  const togglePause = useCallback(() => setPaused(p => !p), []);
-
+  // Start timer whenever paused or pool changes
   useEffect(() => {
-    if (paused || pool.length === 0) {
-      if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
-      if (timerRef.current) clearInterval(timerRef.current);
-      return;
-    }
-    timerRef.current = setInterval(() => rotate(1), ROTATE_INTERVAL_MS);
+    startTimer();
     return () => {
       if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [paused, pool.length, rotate]);
+  }, [paused, pool.length, startTimer]);
+
+  const advance = useCallback((dir = 1) => {
+    setCurrentIdx(prev => {
+      const p = poolRef.current;
+      if (p.length === 0) return prev;
+      if (dir === 1) return (prev + 1) % p.length;
+      return (prev - 1 + p.length) % p.length;
+    });
+  }, []);
+
+  const rotate = useCallback((dir = 1) => {
+    if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
+    setFade(true);
+    // Reset the auto-timer on manual navigation
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => rotate(1), ROTATE_INTERVAL_MS);
+    }
+    fadeTimerRef.current = setTimeout(() => {
+      advance(dir);
+      setFade(false);
+      fadeTimerRef.current = null;
+    }, TRANSITION_DURATION);
+  }, [advance]);
+
+  const shuffle = useCallback(() => {
+    if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
+    setFade(true);
+    // Reset the auto-timer on manual shuffle
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => rotate(1), ROTATE_INTERVAL_MS);
+    }
+    fadeTimerRef.current = setTimeout(() => {
+      setCurrentIdx(Math.floor(Math.random() * poolRef.current.length));
+      setFade(false);
+      fadeTimerRef.current = null;
+    }, TRANSITION_DURATION);
+  }, []);
+
+  const togglePause = useCallback(() => setPaused(p => !p), []);
 
   if (loading) return (
     <main className="min-h-screen flex items-center justify-center" style={{ background: theme.bg, color: theme.muted }}>
